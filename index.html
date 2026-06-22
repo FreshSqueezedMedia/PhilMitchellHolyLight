@@ -215,10 +215,30 @@ function saveSeqs() {
     render(); 
 }
 
-function loadSeq(sv) { 
+function loadSeq(seqId) { 
+    const sv = state.savedSequences.find(s => s.id === seqId);
+    if (!sv) return;
     state.sequences = JSON.parse(JSON.stringify(sv.steps)); 
     state.sequences.forEach(s => s.id = Date.now() + Math.random()); 
     state.activeTab = 'build'; 
+    render(); 
+}
+
+function runSavedSeq(seqId) {
+    const sv = state.savedSequences.find(s => s.id === seqId);
+    if (!sv) return;
+    runSavedSequence(sv);
+}
+
+async function runSavedSequence(sv) { 
+    state.isRunning = true; 
+    render(); 
+    for (const s of sv.steps) { 
+        if (!state.isRunning) break; 
+        sendCommand({ t: 'seq', s }); 
+        await new Promise(r => setTimeout(r, (s.dur + 1) * 1000)); 
+    } 
+    state.isRunning = false; 
     render(); 
 }
 
@@ -241,18 +261,6 @@ async function runSeqs() {
     state.isRunning = true; 
     render(); 
     for (const s of state.sequences) { 
-        if (!state.isRunning) break; 
-        sendCommand({ t: 'seq', s }); 
-        await new Promise(r => setTimeout(r, (s.dur + 1) * 1000)); 
-    } 
-    state.isRunning = false; 
-    render(); 
-}
-
-async function runSavedSeq(sv) { 
-    state.isRunning = true; 
-    render(); 
-    for (const s of sv.steps) { 
         if (!state.isRunning) break; 
         sendCommand({ t: 'seq', s }); 
         await new Promise(r => setTimeout(r, (s.dur + 1) * 1000)); 
@@ -297,7 +305,7 @@ function render() {
         if (!state.isAuthenticated) { 
             app.innerHTML = `<div class="container" style="text-align:center"><h1 style="font-size:24px;margin-bottom:40px">BROADCAST CONTROLS</h1><input type="password" placeholder="Password" value="${state.password}" onchange="setState('password',this.value)" onkeypress="if(event.key==='Enter'&&this.value==='rapture')setState('isAuthenticated',true)"/><button class="btn" onclick="state.password==='rapture'?setState('isAuthenticated',true):alert('Wrong')">BEGIN TRANSMISSION</button></div>`; 
         } else { 
-            app.innerHTML = `<div class="container"><h1 style="text-align:center">BROADCAST CONTROLS</h1><span class="status ${state.isRunning?'running':'idle'}">${state.isRunning?'BROADCASTING':'IDLE'}</span><div class="counter"><div>👥</div><div class="counter-num">${state.audienceCount}</div><div style="color:rgba(255,255,255,0.6);font-size:12px">CONGREGATION</div></div><div style="display:flex;gap:10px;margin:20px 0;border-bottom:2px solid rgba(139,0,139,0.3)"><button style="background:none;border:none;color:${state.activeTab==='build'?'#fff':'rgba(255,255,255,0.5)'};border-bottom:${state.activeTab==='build'?'2px solid rgba(139,0,139,0.8)':'transparent'};cursor:pointer;font-family:Cinzel;padding:12px 20px;margin-bottom:-2px" onclick="setState('activeTab','build')">BUILD</button><button style="background:none;border:none;color:${state.activeTab==='library'?'#fff':'rgba(255,255,255,0.5)'};border-bottom:${state.activeTab==='library'?'2px solid rgba(139,0,139,0.8)':'transparent'};cursor:pointer;font-family:Cinzel;padding:12px 20px;margin-bottom:-2px" onclick="setState('activeTab','library')">LIBRARY</button></div>${state.activeTab === 'build' ? `<h2 style="font-size:18px;margin:20px 0">SEQUENCE BUILDER</h2><button class="btn" onclick="addSeq()" ${state.isRunning?'disabled':''}style="opacity:${state.isRunning?0.5:1};padding:10px">+ ADD STEP</button>${state.sequences.length === 0 ? '<p style="text-align:center;color:rgba(255,255,255,0.5)">No steps</p>' : state.sequences.map((sq,i) => `<div class="step"><div style="display:flex;justify-content:space-between;margin-bottom:15px"><span>STEP ${i+1}</span><button style="background:none;border:none;color:rgba(139,0,0,0.7);cursor:pointer;opacity:${state.isRunning?0.5:1}" onclick="deleteSeq(${sq.id})">🗑</button></div><label style="font-size:12px;display:block;margin-bottom:10px">Frequency</label><div class="preset-grid">${Object.entries(PRESETS).map(([k,p]) => `<button class="preset-btn ${k==='blackout'?'blackout':''} ${sq.preset===k?'active':''}" onclick="updateSeq(${sq.id},'preset','${k}')" ${state.isRunning?'disabled':''}>${p.label}</button>`).join('')}</div><label style="font-size:12px;display:block;margin:15px 0 8px">Location</label><select onchange="updateSeq(${sq.id},'loc',this.value)" ${state.isRunning?'disabled':''}><option value="all" ${sq.loc==='all'?'selected':''}>All</option><option value="wave" ${sq.loc==='wave'?'selected':''}>Wave</option><option value="random-50" ${sq.loc==='random-50'?'selected':''}>Random 50%</option><option value="random-25" ${sq.loc==='random-25'?'selected':''}>Random 25%</option></select><label style="font-size:12px;display:block;margin:15px 0 8px">Duration: ${sq.dur}s</label><input type="range" min="1" max="300" value="${sq.dur}" onchange="updateSeq(${sq.id},'dur',parseInt(this.value))" ${state.isRunning?'disabled':''} style="width:100%;margin:0"/></div>`).join('')}${state.sequences.length > 0 ? `<input type="text" placeholder="Sequence name" value="${state.sequenceName}" onchange="setState('sequenceName',this.value)" ${state.isRunning?'disabled':''}style="margin:15px 0"/><div style="display:grid;grid-template-columns:${state.isRunning?'2fr 1fr':'1fr 1fr'};gap:10px">${!state.isRunning ? `<button class="btn" onclick="saveSeqs()" style="padding:10px">💾 SAVE</button>` : ''}<button class="btn" onclick="${state.isRunning?'stopSeq()':'runSeqs()'}" style="padding:10px">${state.isRunning?'⏹ STOP':'▶ RUN'}</button></div>` : ''}` : `<h2 style="font-size:18px;margin:20px 0">SAVED SEQUENCES</h2>${state.savedSequences.length === 0 ? '<p style="text-align:center;color:rgba(255,255,255,0.5)">None</p>' : state.savedSequences.map(sv => `<div style="background:rgba(0,0,0,0.5);border:2px solid rgba(139,0,139,0.4);border-radius:6px;padding:15px;margin:10px 0"><div style="display:flex;justify-content:space-between;margin-bottom:10px"><div><h3 style="font-size:16px">${sv.name}</h3><p style="font-size:12px;color:rgba(255,255,255,0.5)">${sv.steps.length} steps</p></div><button style="background:none;border:none;color:rgba(139,0,0,0.7);cursor:pointer;opacity:${state.isRunning?0.5:1}" onclick="deleteSeqSaved(${sv.id})">🗑</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn" onclick="loadSeq({id:${sv.id},name:'${sv.name}',steps:${JSON.stringify(sv.steps)}})" style="padding:10px" ${state.isRunning?'disabled':''}>LOAD</button><button class="btn" onclick="runSavedSeq({id:${sv.id},name:'${sv.name}',steps:${JSON.stringify(sv.steps)}})" style="padding:10px" ${state.isRunning?'disabled':''}>RUN</button></div></div>`).join('')}`}<button style="width:100%;margin-top:30px;padding:15px;background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-family:Cinzel;font-size:14px" onclick="setState('isAuthenticated',false);setState('mode','choose')">END TRANSMISSION</button></div>`; 
+            app.innerHTML = `<div class="container"><h1 style="text-align:center">BROADCAST CONTROLS</h1><span class="status ${state.isRunning?'running':'idle'}">${state.isRunning?'BROADCASTING':'IDLE'}</span><div class="counter"><div>👥</div><div class="counter-num">${state.audienceCount}</div><div style="color:rgba(255,255,255,0.6);font-size:12px">CONGREGATION</div></div><div style="display:flex;gap:10px;margin:20px 0;border-bottom:2px solid rgba(139,0,139,0.3)"><button style="background:none;border:none;color:${state.activeTab==='build'?'#fff':'rgba(255,255,255,0.5)'};border-bottom:${state.activeTab==='build'?'2px solid rgba(139,0,139,0.8)':'transparent'};cursor:pointer;font-family:Cinzel;padding:12px 20px;margin-bottom:-2px" onclick="setState('activeTab','build')">BUILD</button><button style="background:none;border:none;color:${state.activeTab==='library'?'#fff':'rgba(255,255,255,0.5)'};border-bottom:${state.activeTab==='library'?'2px solid rgba(139,0,139,0.8)':'transparent'};cursor:pointer;font-family:Cinzel;padding:12px 20px;margin-bottom:-2px" onclick="setState('activeTab','library')">LIBRARY</button></div>${state.activeTab === 'build' ? `<h2 style="font-size:18px;margin:20px 0">SEQUENCE BUILDER</h2><button class="btn" onclick="addSeq()" ${state.isRunning?'disabled':''}style="opacity:${state.isRunning?0.5:1};padding:10px">+ ADD STEP</button>${state.sequences.length === 0 ? '<p style="text-align:center;color:rgba(255,255,255,0.5)">No steps</p>' : state.sequences.map((sq,i) => `<div class="step"><div style="display:flex;justify-content:space-between;margin-bottom:15px"><span>STEP ${i+1}</span><button style="background:none;border:none;color:rgba(139,0,0,0.7);cursor:pointer;opacity:${state.isRunning?0.5:1}" onclick="deleteSeq(${sq.id})">🗑</button></div><label style="font-size:12px;display:block;margin-bottom:10px">Frequency</label><div class="preset-grid">${Object.entries(PRESETS).map(([k,p]) => `<button class="preset-btn ${k==='blackout'?'blackout':''} ${sq.preset===k?'active':''}" onclick="updateSeq(${sq.id},'preset','${k}')" ${state.isRunning?'disabled':''}>${p.label}</button>`).join('')}</div><label style="font-size:12px;display:block;margin:15px 0 8px">Location</label><select onchange="updateSeq(${sq.id},'loc',this.value)" ${state.isRunning?'disabled':''}><option value="all" ${sq.loc==='all'?'selected':''}>All</option><option value="wave" ${sq.loc==='wave'?'selected':''}>Wave</option><option value="random-50" ${sq.loc==='random-50'?'selected':''}>Random 50%</option><option value="random-25" ${sq.loc==='random-25'?'selected':''}>Random 25%</option></select><label style="font-size:12px;display:block;margin:15px 0 8px">Duration: ${sq.dur}s</label><input type="range" min="1" max="300" value="${sq.dur}" onchange="updateSeq(${sq.id},'dur',parseInt(this.value))" ${state.isRunning?'disabled':''} style="width:100%;margin:0"/></div>`).join('')}${state.sequences.length > 0 ? `<input type="text" placeholder="Sequence name" value="${state.sequenceName}" onchange="setState('sequenceName',this.value)" ${state.isRunning?'disabled':''}style="margin:15px 0"/><div style="display:grid;grid-template-columns:${state.isRunning?'2fr 1fr':'1fr 1fr'};gap:10px">${!state.isRunning ? `<button class="btn" onclick="saveSeqs()" style="padding:10px">💾 SAVE</button>` : ''}<button class="btn" onclick="${state.isRunning?'stopSeq()':'runSeqs()'}" style="padding:10px">${state.isRunning?'⏹ STOP':'▶ RUN'}</button></div>` : ''}` : `<h2 style="font-size:18px;margin:20px 0">SAVED SEQUENCES (${state.savedSequences.length})</h2>${state.savedSequences.length === 0 ? '<p style="text-align:center;color:rgba(255,255,255,0.5)">None saved yet</p>' : state.savedSequences.map(sv => `<div style="background:rgba(0,0,0,0.5);border:2px solid rgba(139,0,139,0.4);border-radius:6px;padding:15px;margin:10px 0"><div style="display:flex;justify-content:space-between;margin-bottom:10px"><div><h3 style="font-size:16px">${sv.name}</h3><p style="font-size:12px;color:rgba(255,255,255,0.5)">${sv.steps.length} steps</p></div><button style="background:none;border:none;color:rgba(139,0,0,0.7);cursor:pointer;opacity:${state.isRunning?0.5:1}" onclick="deleteSeqSaved(${sv.id})">🗑</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn" onclick="loadSeq(${sv.id})" style="padding:10px" ${state.isRunning?'disabled':''}>LOAD</button><button class="btn" onclick="runSavedSeq(${sv.id})" style="padding:10px" ${state.isRunning?'disabled':''}>RUN</button></div></div>`).join('')}`}<button style="width:100%;margin-top:30px;padding:15px;background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-family:Cinzel;font-size:14px" onclick="setState('isAuthenticated',false);setState('mode','choose')">END TRANSMISSION</button></div>`; 
         } 
     }
 }
